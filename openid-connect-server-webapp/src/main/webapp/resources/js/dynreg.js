@@ -1,6 +1,6 @@
 /*******************************************************************************
- * Copyright 2014 The MITRE Corporation
- *   and the MIT Kerberos and Internet Trust Consortium
+ * Copyright 2016 The MITRE Corporation
+ *   and the MIT Internet Trust Consortium
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,10 @@ var DynRegClient = Backbone.Model.extend({
         grant_types:[],
         response_types:[],
         policy_uri:null,
+        
         jwks_uri:null,
+        jwks:null,
+        jwksType:'URI',
         
         application_type:null,
         sector_identifier_uri:null,
@@ -52,7 +55,9 @@ var DynRegClient = Backbone.Model.extend({
         default_acr_values:null,
         
         initiate_login_uri:null,
-        post_logout_redirect_uri:null,
+        post_logout_redirect_uris:null,
+        
+        claims_redirect_uris:[],
         
         request_uris:[],
         
@@ -95,9 +100,9 @@ var DynRegRootView = Backbone.View.extend({
     	}
 
     	$('#loadingbox').sheet('show');
-    	$('#loading').html('<span class="label" id="loading-scopes">Scopes</span> ');
+    	$('#loading').html('<span class="label" id="loading-scopes">' + $.t('common.scopes') + '</span> ');
 
-    	$.when(this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}}))
+    	$.when(this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}, error:app.errorHandlerView.handleError()}))
     	.done(function() {
     	    		$('#loadingbox').sheet('hide');
     	    		callback();
@@ -106,6 +111,7 @@ var DynRegRootView = Backbone.View.extend({
     	
 	render:function() {
     	$(this.el).html($('#tmpl-dynreg').html());
+        $(this.el).i18n();
     	return this;
 	},
 	
@@ -127,36 +133,39 @@ var DynRegRootView = Backbone.View.extend({
 		
 		var self = this;
 		
-		client.fetch({success: function() {
+		client.fetch({
+			success: function() {
 
-    		var userInfo = getUserInfo();
-    		var contacts = client.get("contacts");
-    		if (userInfo != null && userInfo.email != null && ! _.contains(contacts, userInfo.email)) {
-    			contacts.push(userInfo.email);
-    		}
-    		client.set({
-    			contacts: contacts
-    		}, { silent: true });
-			
-	    	var view = new DynRegEditView({model: client, systemScopeList: app.systemScopeList}); 
-	    	
-	    	view.load(function() {
-	    		$('#content').html(view.render().el);
-	    		view.delegateEvents();
-	    		setPageTitle("Edit a Dynamically Registered Client");
-	    		app.navigate('dev/dynreg/edit', {trigger: true});	    		
-	    		self.remove();
-	    	});
-		}, error: function() {
-    		$('#modalAlert div.modal-body').html("Invalid client or registration access token.");
-    		
-			 $("#modalAlert").modal({ // wire up the actual modal functionality and show the dialog
-				 "backdrop" : "static",
-				 "keyboard" : true,
-				 "show" : true // ensure the modal is shown immediately
-			 });
-
-		}});
+	    		var userInfo = getUserInfo();
+	    		var contacts = client.get("contacts");
+	    		if (userInfo != null && userInfo.email != null && ! _.contains(contacts, userInfo.email)) {
+	    			contacts.push(userInfo.email);
+	    		}
+	    		client.set({
+	    			contacts: contacts
+	    		}, { silent: true });
+	    		
+		        if (client.get("jwks")) {
+		        	client.set({
+		        		jwksType: "VAL"
+		        	}, { silent: true });
+		        } else {
+		        	client.set({
+		        		jwksType: "URI"
+		        	}, { silent: true });
+		        }
+				
+		    	var view = new DynRegEditView({model: client, systemScopeList: app.systemScopeList}); 
+		    	
+		    	view.load(function() {
+		    		$('#content').html(view.render().el);
+		    		view.delegateEvents();
+		    		setPageTitle($.t('dynreg.edit-dynamically-registered'));
+		    		app.navigate('dev/dynreg/edit', {trigger: true});	    		
+		    		self.remove();
+		    	});
+			}, error:app.errorHandlerView.handleError({message: $.t('dynreg.invalid-access-token')})
+		});
 	}
 	
 });
@@ -176,6 +185,10 @@ var DynRegEditView = Backbone.View.extend({
         this.contactsCollection = new Backbone.Collection();
         this.defaultAcrValuesCollection = new Backbone.Collection();
         this.requestUrisCollection = new Backbone.Collection();
+        this.postLogoutRedirectUrisCollection = new Backbone.Collection();
+        this.claimsRedirectUrisCollection = new Backbone.Collection();
+        
+        this.listWidgetViews = [];
 	},
 	
 	load:function(callback) {
@@ -185,9 +198,9 @@ var DynRegEditView = Backbone.View.extend({
     	}
 
     	$('#loadingbox').sheet('show');
-    	$('#loading').html('<span class="label" id="loading-scopes">Scopes</span> ');
+    	$('#loading').html('<span class="label" id="loading-scopes">' + $.t('common.scopes') + '</span> ');
 
-    	$.when(this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}}))
+    	$.when(this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}, error:app.errorHandlerView.handleError()}))
     	.done(function() {
     	    		$('#loadingbox').sheet('hide');
     	    		callback();
@@ -199,7 +212,8 @@ var DynRegEditView = Backbone.View.extend({
         "click .btn-cancel":"cancel",
         "click .btn-delete":"deleteClient",
         "change #logoUri input":"previewLogo",
-        "change #tokenEndpointAuthMethod input:radio":"toggleClientCredentials"
+        "change #tokenEndpointAuthMethod input:radio":"toggleClientCredentials",
+        "change #jwkSelector input:radio":"toggleJWKSetType"
     },
 
     cancel:function(e) {
@@ -210,30 +224,16 @@ var DynRegEditView = Backbone.View.extend({
     deleteClient:function (e) {
     	e.preventDefault();
 
-        if (confirm("Are you sure sure you would like to delete this client?")) {
+        if (confirm($.t('client.client-table.confirm'))) {
             var self = this;
 
             this.model.destroy({
+            	dataType: false, processData: false,
                 success:function () {
                 	self.remove();
                 	app.navigate('dev/dynreg', {trigger: true});
                 },
-                error:function (error, response) {
-            		console.log("An error occurred when deleting a client");
-    
-					//Pull out the response text.
-					var responseJson = JSON.parse(response.responseText);
-            		
-            		//Display an alert with an error message
-					$('#modalAlert div.modal-header').html(responseJson.error);
-	        		$('#modalAlert div.modal-body').html(responseJson.error_description);
-            		
-        			 $("#modalAlert").modal({ // wire up the actual modal functionality and show the dialog
-        				 "backdrop" : "static",
-        				 "keyboard" : true,
-        				 "show" : true // ensure the modal is shown immediately
-        			 });
-            	}
+                error:app.errorHandlerView.handleError({"log": "An error occurred when deleting a client"})
             });
 
         }
@@ -268,6 +268,25 @@ var DynRegEditView = Backbone.View.extend({
         }
     },
     
+    /**
+     * Set up the form based on the JWK Set selector 
+     */
+    toggleJWKSetType:function() {
+    	var jwkSelector = $('#jwkSelector input:radio', this.el).filter(':checked').val();
+    	
+    	if (jwkSelector == 'URI') {
+    		$('#jwksUri', this.el).show();
+    		$('#jwks', this.el).hide();
+    	} else if (jwkSelector == 'VAL') {
+    		$('#jwksUri', this.el).hide();
+    		$('#jwks', this.el).show();
+    	} else {
+    		$('#jwksUri', this.el).hide();
+    		$('#jwks', this.el).hide();
+    	}
+    	
+    },
+
     disableUnsupportedJOSEItems:function(serverSupported, query) {
         var supported = ['default'];
         if (serverSupported) {
@@ -318,6 +337,11 @@ var DynRegEditView = Backbone.View.extend({
 
         $('.control-group').removeClass('error');
 
+        // sync any leftover collection items
+        _.each(this.listWidgetViews, function(v) {
+        	v.addItem($.Event('click'));
+        });
+        
         // build the scope object
         var scopes = this.scopeCollection.pluck("item").join(" ");
         
@@ -345,9 +369,42 @@ var DynRegEditView = Backbone.View.extend({
         	}
         }
 
-        var attrs = {
+        // make sure that the subject identifier is consistent with the redirect URIs
+        var subjectType = $('#subjectType input').filter(':checked').val();
+        var redirectUris = this.redirectUrisCollection.pluck("item");
+        var sectorIdentifierUri = $('#sectorIdentifierUri input').val();
+        if (subjectType == 'PAIRWISE' && redirectUris.length > 1 && sectorIdentifierUri == '') {
+    		//Display an alert with an error message
+        	app.errorHandlerView.showErrorMessage($.t("client.client-form.error.consistency"), $.t("client.client-form.error.pairwise-sector"));
+			return false;
+      	
+        }
+        
+        // process the JWKS
+        var jwksUri = null;
+        var jwks = null;
+        var jwkSelector = $('#jwkSelector input:radio', this.el).filter(':checked').val();
+    	
+    	if (jwkSelector == 'URI') {
+            jwksUri = $('#jwksUri input').val();
+    		jwks = null;
+    	} else if (jwkSelector == 'VAL') {
+    		jwksUri = null;
+    		try {
+    			jwks = JSON.parse($('#jwks textarea').val());
+    		} catch (e) {
+        		console.log("An error occurred when parsing the JWK Set");
+            	app.errorHandlerView.showErrorMessage($.t("client.client-form.error.jwk-set"), $.t("client.client-form.error.jwk-set-parse"));
+    			return false;
+    		}
+    	} else {
+    		jwksUri = null;
+    		jwks = null;
+    	}
+
+    	var attrs = {
             client_name:$('#clientName input').val(),
-            redirect_uris: this.redirectUrisCollection.pluck("item"),
+            redirect_uris: redirectUris,
             logo_uri:$('#logoUri input').val(),
             grant_types: grantTypes,
             scope: scopes,
@@ -356,14 +413,16 @@ var DynRegEditView = Backbone.View.extend({
             policy_uri: $('#policyUri input').val(),
             client_uri: $('#clientUri input').val(),
             application_type: $('#applicationType input').filter(':checked').val(),
-            jwks_uri: $('#jwksUri input').val(),
-            subject_type: $('#subjectType input').filter(':checked').val(),
+            jwks_uri: jwksUri,
+            jwks: jwks,
+            subject_type: subjectType,
+            software_statement: $('#softwareStatement textarea').val(),
             token_endpoint_auth_method: $('#tokenEndpointAuthMethod input').filter(':checked').val(),
             response_types: responseTypes,
-            sector_identifier_uri: $('#sectorIdentifierUri input').val(),
+            sector_identifier_uri: sectorIdentifierUri,
             initiate_login_uri: $('#initiateLoginUri input').val(),
-            post_logout_redirect_uri: $('#postLogoutRedirectUri input').val(),
-            reuse_refresh_token: $('#reuseRefreshToken').is(':checked'),
+            post_logout_redirect_uris: this.postLogoutRedirectUrisCollection.pluck('item'),
+            claims_redirect_uris: this.claimsRedirectUrisCollection.pluck('item'),
             require_auth_time: $('#requireAuthTime input').is(':checked'),
             default_max_age: parseInt($('#defaultMaxAge input').val()),
             contacts: contacts,
@@ -402,6 +461,16 @@ var DynRegEditView = Backbone.View.extend({
         			contacts: contacts
         		}, { silent: true });
 
+    	        if (_self.model.get("jwks")) {
+    	        	_self.model.set({
+    	        		jwksType: "VAL"
+    	        	}, { silent: true });
+    	        } else {
+    	        	_self.model.set({
+    	        		jwksType: "URI"
+    	        	}, { silent: true });
+    	        }
+        		
         		var view = new DynRegEditView({model: _self.model, systemScopeList: _self.options.systemScopeList});
     			
     			view.load(function() {
@@ -410,41 +479,32 @@ var DynRegEditView = Backbone.View.extend({
     				view.delegateEvents();
     			});
             },
-            error:function (error, response) {
-        		console.log("An error occurred when deleting from a list widget");
-
-				//Pull out the response text.
-				var responseJson = JSON.parse(response.responseText);
-        		
-        		//Display an alert with an error message
-				$('#modalAlert div.modal-header').html(responseJson.error);
-        		$('#modalAlert div.modal-body').html(responseJson.error_description);
-        		
-    			 $("#modalAlert").modal({ // wire up the actual modal functionality and show the dialog
-    				 "backdrop" : "static",
-    				 "keyboard" : true,
-    				 "show" : true // ensure the modal is shown immediately
-    			 });
-        	}
+            error:app.errorHandlerView.handleError({log: "An error occurred when saving a client"})
         });
 
         return false;
     },
 
     render:function() {
-		$(this.el).html(this.template({client: this.model.toJSON(), userInfo: getUserInfo()}));
+    	var data = {client: this.model.toJSON(), userInfo: getUserInfo(), heartMode: heartMode};
+		$(this.el).html(this.template(data));
 		
-        var _self = this;
+		this.listWidgetViews = [];
+		
+		var _self = this;
 
         // build and bind registered redirect URI collection and view
         _.each(this.model.get("redirect_uris"), function (redirectUri) {
             _self.redirectUrisCollection.add(new URIModel({item:redirectUri}));
         });
 
-        $("#redirectUris .controls",this.el).html(new ListWidgetView({
+        var redirectUriView = new ListWidgetView({
         	type:'uri', 
         	placeholder: 'https://',
-        	collection: this.redirectUrisCollection}).render().el);
+        	helpBlockText: $.t('client.client-form.redirect-uris-help'),
+        	collection: this.redirectUrisCollection});
+        $("#redirectUris .controls",this.el).html(redirectUriView.render().el);
+        this.listWidgetViews.push(redirectUriView);
         
         // build and bind scopes
         var scopes = this.model.get("scope");
@@ -453,43 +513,81 @@ var DynRegEditView = Backbone.View.extend({
             _self.scopeCollection.add(new Backbone.Model({item:scope}));
         });
 
-        $("#scope .controls",this.el).html(new ListWidgetView({
-        	placeholder: 'new scope', 
-        	autocomplete: _.uniq(_.flatten(this.options.systemScopeList.pluck("value"))), 
-            collection: this.scopeCollection}).render().el);
+        var scopeView = new ListWidgetView({
+        	placeholder: $.t('client.client-form.scope-placeholder'), 
+        	autocomplete: _.uniq(_.flatten(this.options.systemScopeList.unrestrictedScopes().pluck("value"))), 
+        	helpBlockText: $.t('client.client-form.scope-help'),
+            collection: this.scopeCollection});
+        $("#scope .controls",this.el).html(scopeView.render().el);
+        this.listWidgetViews.push(scopeView);
 
         // build and bind contacts
         _.each(this.model.get('contacts'), function (contact) {
         	_self.contactsCollection.add(new Backbone.Model({item:contact}));
         });
         
-        $("#contacts .controls div", this.el).html(new ListWidgetView({
-        	placeholder: 'new contact',
-        	collection: this.contactsCollection}).render().el);
+        var contactView = new ListWidgetView({
+        	placeholder: $.t('client.client-form.contacts-placeholder'),
+        	helpBlockText: $.t('client.client-form.contacts-help'),
+        	collection: this.contactsCollection});
+        $("#contacts .controls div", this.el).html(contactView.render().el);
+        this.listWidgetViews.push(contactView);
         
+        // build and bind post-logout redirect URIs
+        _.each(this.model.get('post_logout_redirect_uris'), function(postLogoutRedirectUri) {
+        	_self.postLogoutRedirectUrisCollection.add(new URIModel({item:postLogoutRedirectUri}));
+        });
+        
+        var postLogoutRedirectUrisView = new ListWidgetView({
+        	type: 'uri',
+        	placeholder: 'https://',
+        	helpBlockText: $.t('client.client-form.post-logout-help'),
+        	collection: this.postLogoutRedirectUrisCollection});
+        $('#postLogoutRedirectUris .controls', this.el).html(postLogoutRedirectUrisView.render().el);
+        this.listWidgetViews.push(postLogoutRedirectUrisView);
+
+        // build and bind claims redirect URIs
+        _.each(this.model.get('claimsRedirectUris'), function(claimsRedirectUri) {
+        	_self.claimsRedirectUrisCollection.add(new URIModel({item:claimsRedirectUri}));
+        });
+        
+        var claimsRedirectUrisView = new ListWidgetView({
+        	type: 'uri',
+        	placeholder: 'https://',
+        	helpBlockText: $.t('client.client-form.claims-redirect-uris-help'),
+        	collection: this.claimsRedirectUrisCollection});
+        $('#claimsRedirectUris .controls', this.el).html(claimsRedirectUrisView.render().el);
+        this.listWidgetViews.push(claimsRedirectUrisView);
         
         // build and bind request URIs
         _.each(this.model.get('request_uris'), function (requestUri) {
         	_self.requestUrisCollection.add(new URIModel({item:requestUri}));
         });
         
-        $('#requestUris .controls', this.el).html(new ListWidgetView({
+        var requestUriView = new ListWidgetView({
         	type: 'uri',
         	placeholder: 'https://',
-        	collection: this.requestUrisCollection}).render().el);
+        	helpBlockText: $.t('client.client-form.request-uri-help'),
+        	collection: this.requestUrisCollection});
+        $('#requestUris .controls', this.el).html(requestUriView.render().el);
+        this.listWidgetViews.push(requestUriView);
         
         // build and bind default ACR values
         _.each(this.model.get('default_acr_values'), function (defaultAcrValue) {
         	_self.defaultAcrValuesCollection.add(new Backbone.Model({item:defaultAcrValue}));
         });
         
-        $('#defaultAcrValues .controls', this.el).html(new ListWidgetView({
-        	placeholder: 'new ACR value',
+        var defaultAcrView = new ListWidgetView({
+        	placeholder: $.t('client.client-form.acr-values-placeholder'),
         	// TODO: autocomplete from spec
-        	collection: this.defaultAcrValuesCollection}).render().el);
+        	helpBlockText: $.t('client.client-form.acr-values-help'),
+        	collection: this.defaultAcrValuesCollection});
+        $('#defaultAcrValues .controls', this.el).html(defaultAcrView.render().el);
+        this.listWidgetViews.push(defaultAcrView);
 
         this.toggleClientCredentials();
         this.previewLogo();
+        this.toggleJWKSetType();
         
         // disable unsupported JOSE algorithms
         this.disableUnsupportedJOSEItems(app.serverConfiguration.request_object_signing_alg_values_supported, '#requestObjectSigningAlg option');
@@ -503,13 +601,12 @@ var DynRegEditView = Backbone.View.extend({
         
         this.$('.nyi').clickover({
         	placement: 'right', 
-        	title: 'Not Yet Implemented', 
-        	content: 'The value of this field will be saved with the client, '
-        		+'but the server does not currently process anything with it. '
-        		+'Future versions of the server library will make use of this.'
+            title: $.t('common.not-yet-implemented'),
+            content: $.t('common.not-yet-implemented-content')
         	});
         
 
+        $(this.el).i18n();
         return this;
 	}
 	

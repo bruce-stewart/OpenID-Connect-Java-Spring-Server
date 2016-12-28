@@ -1,32 +1,32 @@
 /*******************************************************************************
- * Copyright 2014 The MITRE Corporation
- *   and the MIT Kerberos and Internet Trust Consortium
- * 
+ * Copyright 2016 The MITRE Corporation
+ *   and the MIT Internet Trust Consortium
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ *******************************************************************************/
 package org.mitre.openid.connect.service.impl;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mitre.oauth2.model.ClientDetailsEntity;
+import org.mitre.oauth2.model.OAuth2AccessTokenEntity;
+import org.mitre.oauth2.repository.OAuth2TokenRepository;
 import org.mitre.openid.connect.model.ApprovedSite;
 import org.mitre.openid.connect.repository.ApprovedSiteRepository;
 import org.mitre.openid.connect.service.ApprovedSiteService;
@@ -37,7 +37,13 @@ import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.springframework.test.annotation.Rollback;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+
+import static org.mockito.Matchers.any;
+
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @RunWith(MockitoJUnitRunner.class)
 public class TestDefaultApprovedSiteService {
@@ -52,6 +58,9 @@ public class TestDefaultApprovedSiteService {
 	@Mock
 	private ApprovedSiteRepository repository;
 
+	@Mock
+	private OAuth2TokenRepository tokenRepository;
+	
 	@Mock
 	private StatsService statsService;
 
@@ -96,6 +105,8 @@ public class TestDefaultApprovedSiteService {
 	public void clearApprovedSitesForClient_success() {
 		Set<ApprovedSite> setToReturn = Sets.newHashSet(site2, site3);
 		Mockito.when(repository.getByClientId(client.getClientId())).thenReturn(setToReturn);
+		List<OAuth2AccessTokenEntity> tokens = ImmutableList.of();
+		Mockito.when(tokenRepository.getAccessTokensForApprovedSite(any(ApprovedSite.class))).thenReturn(tokens);
 
 		service.clearApprovedSitesForClient(client);
 

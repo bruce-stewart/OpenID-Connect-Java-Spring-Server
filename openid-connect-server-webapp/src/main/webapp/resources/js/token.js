@@ -1,19 +1,19 @@
 /*******************************************************************************
- * Copyright 2014 The MITRE Corporation 
- *   and the MIT Kerberos and Internet Trust Consortium
- * 
+ * Copyright 2016 The MITRE Corporation
+ *   and the MIT Internet Trust Consortium
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ *******************************************************************************/
 
 var AccessTokenModel = Backbone.Model.extend({
 	idAttribute: 'id',
@@ -21,7 +21,6 @@ var AccessTokenModel = Backbone.Model.extend({
 	defaults:{
 		id:null,
 		value:null,
-		idTokenId:null,
 		refreshTokenId:null,
 		scopes:[],
 		clientId:null,
@@ -94,17 +93,19 @@ var AccessTokenView = Backbone.View.extend({
 		
         $('.client-more-info-block', this.el).html(this.moreInfoTemplate({client: this.options.client.toJSON()}));
 
+        $(this.el).i18n();
         return this;
     },
     
     deleteToken:function (e) {
     	e.preventDefault();
 
-        if (confirm("Are you sure sure you would like to revoke this token?")) {
+        if (confirm($.t("token.token-table.confirm"))) {
         	
             var _self = this;
 
             this.model.destroy({
+            	dataType: false, processData: false,
                 success:function () {
                 	
                     _self.$el.fadeTo("fast", 0.00, function () { //fade
@@ -115,21 +116,7 @@ var AccessTokenView = Backbone.View.extend({
                         });
                     });
                 },
-            	error:function (error, response) {
-            		
-					//Pull out the response text.
-					var responseJson = JSON.parse(response.responseText);
-            		
-            		//Display an alert with an error message
-    				$('#modalAlert div.modal-header').html(responseJson.error);
-            		$('#modalAlert div.modal-body').html(responseJson.error_description);
-            		
-        			 $("#modalAlert").modal({ // wire up the actual modal functionality and show the dialog
-        				 "backdrop" : "static",
-        				 "keyboard" : true,
-        				 "show" : true // ensure the modal is shown immediately
-        			 });
-            	}
+            	error:app.errorHandlerView.handleError()
             });
 
             this.parentView.delegateEvents();
@@ -243,6 +230,7 @@ var RefreshTokenView = Backbone.View.extend({
 		
         $('.client-more-info-block', this.el).html(this.moreInfoTemplate({client: this.options.client.toJSON()}));
         
+        $(this.el).i18n();
         return this;
 
     },
@@ -250,11 +238,12 @@ var RefreshTokenView = Backbone.View.extend({
     deleteToken:function (e) {
     	e.preventDefault();
 
-        if (confirm("Are you sure sure you would like to revoke this refresh token and its associated access tokens?")) {
+        if (confirm($.t('token.token-table.confirm-refresh'))) {
         	
             var _self = this;
 
             this.model.destroy({
+            	dataType: false, processData: false,
                 success:function () {
                 	
                     _self.$el.fadeTo("fast", 0.00, function () { //fade
@@ -265,21 +254,7 @@ var RefreshTokenView = Backbone.View.extend({
                         });
                     });
                 },
-            	error:function (error, response) {
-            		
-					//Pull out the response text.
-					var responseJson = JSON.parse(response.responseText);
-            		
-            		//Display an alert with an error message
-    				$('#modalAlert div.modal-header').html(responseJson.error);
-            		$('#modalAlert div.modal-body').html(responseJson.error_description);
-            		
-        			 $("#modalAlert").modal({ // wire up the actual modal functionality and show the dialog
-        				 "backdrop" : "static",
-        				 "keyboard" : true,
-        				 "show" : true // ensure the modal is shown immediately
-        			 });
-            	}
+            	error:app.errorHandlerView.handleError()
             });
 
             _self.parentView.delegateEvents();
@@ -339,16 +314,17 @@ var TokenListView = Backbone.View.extend({
     	}
 
     	$('#loadingbox').sheet('show');
-    	$('#loading').html('<span class="label" id="loading-access">Access Tokens</span> ' +
-    			'<span class="label" id="loading-refresh">Refresh Tokens</span> ' + 
-    			'<span class="label" id="loading-clients">Clients</span> ' + 
-    			'<span class="label" id="loading-scopes">Scopes</span> '
+    	$('#loading').html(
+                '<span class="label" id="loading-access">' + $.t('token.token-table.access-tokens') + '</span> ' +
+    			'<span class="label" id="loading-refresh">' + $.t('token.token-table.refresh-tokens') + '</span> ' +
+                '<span class="label" id="loading-clients">' + $.t('common.clients') + '</span> ' +
+                '<span class="label" id="loading-scopes">' + $.t('common.scopes') + '</span> '
     			);
 
-    	$.when(this.model.access.fetchIfNeeded({success:function(e) {$('#loading-access').addClass('label-success');}}),
-    			this.model.refresh.fetchIfNeeded({success:function(e) {$('#loading-refresh').addClass('label-success');}}),
-    			this.options.clientList.fetchIfNeeded({success:function(e) {$('#loading-clients').addClass('label-success');}}),
-    			this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}}))
+    	$.when(this.model.access.fetchIfNeeded({success:function(e) {$('#loading-access').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.model.refresh.fetchIfNeeded({success:function(e) {$('#loading-refresh').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.options.clientList.fetchIfNeeded({success:function(e) {$('#loading-clients').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.options.systemScopeList.fetchIfNeeded({success:function(e) {$('#loading-scopes').addClass('label-success');}, error: app.errorHandlerView.handleError()}))
     			.done(function() {
     	    		$('#loadingbox').sheet('hide');
     	    		callback();
@@ -380,16 +356,17 @@ var TokenListView = Backbone.View.extend({
 	
     refreshTable:function(e) {
     	$('#loadingbox').sheet('show');
-    	$('#loading').html('<span class="label" id="loading-access">Access Tokens</span> ' +
-    			'<span class="label" id="loading-refresh">Refresh Tokens</span> ' + 
-    			'<span class="label" id="loading-clients">Clients</span> ' + 
-    			'<span class="label" id="loading-scopes">Scopes</span> '
+    	$('#loading').html(
+                '<span class="label" id="loading-access">' + $.t('token.token-table.access-tokens') + '</span> ' +
+                '<span class="label" id="loading-refresh">' + $.t('token.token-table.refresh-tokens') + '</span> ' +
+                '<span class="label" id="loading-clients">' + $.t('common.clients') + '</span> ' +
+                '<span class="label" id="loading-scopes">' + $.t('common.scopes') + '</span> '
     			);
     	var _self = this;
-    	$.when(this.model.access.fetch({success:function(e) {$('#loading-access').addClass('label-success');}}),
-    			this.model.refresh.fetch({success:function(e) {$('#loading-refresh').addClass('label-success');}}),
-    			this.options.clientList.fetch({success:function(e) {$('#loading-clients').addClass('label-success');}}),
-    			this.options.systemScopeList.fetch({success:function(e) {$('#loading-scopes').addClass('label-success');}}))
+    	$.when(this.model.access.fetch({success:function(e) {$('#loading-access').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.model.refresh.fetch({success:function(e) {$('#loading-refresh').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.options.clientList.fetch({success:function(e) {$('#loading-clients').addClass('label-success');}, error: app.errorHandlerView.handleError()}),
+    			this.options.systemScopeList.fetch({success:function(e) {$('#loading-scopes').addClass('label-success');}, error: app.errorHandlerView.handleError()}))
     			.done(function(){
     				_self.render();
     	    		$('#loadingbox').sheet('hide');
@@ -449,7 +426,7 @@ var TokenListView = Backbone.View.extend({
             	$(element).hide();
             }
             
-            console.log(token.get('refreshTokenId'));
+            //console.log(token.get('refreshTokenId'));
             var refId = token.get('refreshTokenId');
             if (refId != null) {
             	if (refreshCount[refId]) {
@@ -462,7 +439,7 @@ var TokenListView = Backbone.View.extend({
 
 		});
 
-        console.log(refreshCount);
+        //console.log(refreshCount);
         
         // set up pagination
         var numPagesRefresh = Math.ceil(this.model.refresh.length / 10);
@@ -496,8 +473,7 @@ var TokenListView = Backbone.View.extend({
 */
 		
 		this.togglePlaceholder();
-		
+        $(this.el).i18n();
 		return this;
 	}
 });
-

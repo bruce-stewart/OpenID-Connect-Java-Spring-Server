@@ -1,37 +1,30 @@
 /*******************************************************************************
- * Copyright 2014 The MITRE Corporation
- *   and the MIT Kerberos and Internet Trust Consortium
- * 
+ * Copyright 2016 The MITRE Corporation
+ *   and the MIT Internet Trust Consortium
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ *******************************************************************************/
 /**
  * 
  */
 package org.mitre.openid.connect.client.service.impl;
-
-import static org.mitre.discovery.util.JsonUtils.getAsBoolean;
-import static org.mitre.discovery.util.JsonUtils.getAsEncryptionMethodList;
-import static org.mitre.discovery.util.JsonUtils.getAsJweAlgorithmList;
-import static org.mitre.discovery.util.JsonUtils.getAsJwsAlgorithmList;
-import static org.mitre.discovery.util.JsonUtils.getAsString;
-import static org.mitre.discovery.util.JsonUtils.getAsStringList;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.http.client.HttpClient;
-import org.apache.http.impl.client.SystemDefaultHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.mitre.openid.connect.client.service.ServerConfigurationService;
 import org.mitre.openid.connect.config.ServerConfiguration;
 import org.slf4j.Logger;
@@ -48,6 +41,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import static org.mitre.util.JsonUtils.getAsBoolean;
+import static org.mitre.util.JsonUtils.getAsEncryptionMethodList;
+import static org.mitre.util.JsonUtils.getAsJweAlgorithmList;
+import static org.mitre.util.JsonUtils.getAsJwsAlgorithmList;
+import static org.mitre.util.JsonUtils.getAsString;
+import static org.mitre.util.JsonUtils.getAsStringList;
+
 /**
  * 
  * Dynamically fetches OpenID Connect server configurations based on the issuer. Caches the server configurations.
@@ -57,17 +57,24 @@ import com.google.gson.JsonParser;
  */
 public class DynamicServerConfigurationService implements ServerConfigurationService {
 
-	private static Logger logger = LoggerFactory.getLogger(DynamicServerConfigurationService.class);
+	/**
+	 * Logger for this class
+	 */
+	private static final Logger logger = LoggerFactory.getLogger(DynamicServerConfigurationService.class);
 
 	// map of issuer -> server configuration, loaded dynamically from service discovery
 	private LoadingCache<String, ServerConfiguration> servers;
 
-	private Set<String> whitelist = new HashSet<String>();
-	private Set<String> blacklist = new HashSet<String>();
+	private Set<String> whitelist = new HashSet<>();
+	private Set<String> blacklist = new HashSet<>();
 
 	public DynamicServerConfigurationService() {
+		this(HttpClientBuilder.create().useSystemProperties().build());
+	}
+
+	public DynamicServerConfigurationService(HttpClient httpClient) {
 		// initialize the cache
-		servers = CacheBuilder.newBuilder().build(new OpenIDConnectServiceConfigurationFetcher());
+		servers = CacheBuilder.newBuilder().build(new OpenIDConnectServiceConfigurationFetcher(httpClient));
 	}
 
 	/**
@@ -111,11 +118,8 @@ public class DynamicServerConfigurationService implements ServerConfigurationSer
 			}
 
 			return servers.get(issuer);
-		} catch (UncheckedExecutionException ue) {
-			logger.warn("Couldn't load configuration for " + issuer, ue);
-			return null;
-		} catch (ExecutionException e) {
-			logger.warn("Couldn't load configuration for " + issuer, e);
+		} catch (UncheckedExecutionException | ExecutionException e) {
+			logger.warn("Couldn't load configuration for " + issuer + ": " + e);
 			return null;
 		}
 
@@ -126,9 +130,12 @@ public class DynamicServerConfigurationService implements ServerConfigurationSer
 	 *
 	 */
 	private class OpenIDConnectServiceConfigurationFetcher extends CacheLoader<String, ServerConfiguration> {
-		private HttpClient httpClient = new SystemDefaultHttpClient();
-		private HttpComponentsClientHttpRequestFactory httpFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+		private HttpComponentsClientHttpRequestFactory httpFactory;
 		private JsonParser parser = new JsonParser();
+
+        OpenIDConnectServiceConfigurationFetcher(HttpClient httpClient) {
+            this.httpFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        }
 
 		@Override
 		public ServerConfiguration load(String issuer) throws Exception {
@@ -154,7 +161,7 @@ public class DynamicServerConfigurationService implements ServerConfigurationSer
 				}
 
 				if (!issuer.equals(o.get("issuer").getAsString())) {
-					throw new IllegalStateException("Discovered issuers didn't match, expected " + issuer + " got " + o.get("issuer").getAsString());
+					logger.info("Issuer used for discover was " + issuer + " but final issuer is " + o.get("issuer").getAsString());
 				}
 
 				conf.setIssuer(o.get("issuer").getAsString());

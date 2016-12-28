@@ -129,9 +129,16 @@ h1,label {
 .input-prepend.input-block-level > input {
   box-sizing: border-box; /* use bootstrap mixin or include vendor variants */
   -moz-box-sizing: border-box; /* for Firefox */
-  display: table; /* table-cell is not working well in Chrome for small widths */
   min-height: inherit;
   width: 100%;
+}
+
+/* This block applies to Chrome only */
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+  .input-append.input-block-level > input,
+  .input-prepend.input-block-level > input {
+    display: table; /* table-cell is not working well in Chrome for small widths */
+  }
 }
 
 .input-append.input-block-level > input {
@@ -142,3 +149,54 @@ h1,label {
   border-left: 0;
 }
 
+.label-matched, .badge-matched {
+	background-color: #D1D1FF;
+}
+
+/* get rid of extraneous outline on tabs */
+
+.nav-tabs > .active > a, .nav-tabs > .active > a:hover {
+	outline: 0;
+}
+
+.control-group .controls div {
+    display: block;
+}
+
+.control-group .controls div {
+    padding-top: 5px;
+    margin-bottom: 5px;
+}
+
+.control-group .controls div label.checkbox,
+.control-group .controls div label.radio {
+  display: inline-block;
+  padding: 0 5px 0 5px;
+  line-height: 20px;
+}
+
+.control-group .controls div input[type=checkbox],
+.control-group .controls div input[type=radio] {
+  line-height: 20px;
+  vertical-align: middle;
+  margin: 0;
+}
+
+/* User profile claims alignment */
+.user-profile dd, .user-profile dt {
+    height: 20px;
+}
+
+/* Client table images */
+.client-logo {
+	max-width: 64px; 
+	max-height: 64px
+}
+
+/* Modal and sheet fight for the same z-index otherwise */
+.modal-backdrop {
+  z-index: 2040;
+}
+.modal {
+  z-index: 2050;
+}
