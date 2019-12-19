@@ -1,6 +1,7 @@
 /*******************************************************************************
- * Copyright 2016 The MITRE Corporation
- *   and the MIT Internet Trust Consortium
+ * Copyright 2018 The MIT Internet Trust Consortium
+ *
+ * Portions copyright 2011-2013 The MITRE Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +20,7 @@ package org.mitre.oauth2.repository.impl;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +33,8 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaDelete;
 import javax.persistence.criteria.Root;
 
+import org.mitre.data.DefaultPageCriteria;
+import org.mitre.data.PageCriteria;
 import org.mitre.oauth2.model.ClientDetailsEntity;
 import org.mitre.oauth2.model.OAuth2AccessTokenEntity;
 import org.mitre.oauth2.model.OAuth2RefreshTokenEntity;
@@ -50,7 +54,7 @@ import com.nimbusds.jwt.JWTParser;
 public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 
 	private static final int MAXEXPIREDRESULTS = 1000;
-	
+
 	private static final Logger logger = LoggerFactory.getLogger(JpaOAuth2TokenRepository.class);
 
 	@PersistenceContext(unitName="defaultPersistenceUnit")
@@ -95,7 +99,7 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 	@Override
 	@Transactional(value="defaultTransactionManager")
 	public void removeAccessToken(OAuth2AccessTokenEntity accessToken) {
-		OAuth2AccessTokenEntity found = getAccessTokenByValue(accessToken.getValue());
+		OAuth2AccessTokenEntity found = getAccessTokenById(accessToken.getId());
 		if (found != null) {
 			manager.remove(found);
 		} else {
@@ -140,7 +144,7 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 	@Override
 	@Transactional(value="defaultTransactionManager")
 	public void removeRefreshToken(OAuth2RefreshTokenEntity refreshToken) {
-		OAuth2RefreshTokenEntity found = getRefreshTokenByValue(refreshToken.getValue());
+		OAuth2RefreshTokenEntity found = getRefreshTokenById(refreshToken.getId());
 		if (found != null) {
 			manager.remove(found);
 		} else {
@@ -165,9 +169,6 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see org.mitre.oauth2.repository.OAuth2TokenRepository#getAccessTokensForClient(org.mitre.oauth2.model.ClientDetailsEntity)
-	 */
 	@Override
 	public List<OAuth2AccessTokenEntity> getAccessTokensForClient(ClientDetailsEntity client) {
 		TypedQuery<OAuth2AccessTokenEntity> queryA = manager.createNamedQuery(OAuth2AccessTokenEntity.QUERY_BY_CLIENT, OAuth2AccessTokenEntity.class);
@@ -176,9 +177,6 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		return accessTokens;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.mitre.oauth2.repository.OAuth2TokenRepository#getRefreshTokensForClient(org.mitre.oauth2.model.ClientDetailsEntity)
-	 */
 	@Override
 	public List<OAuth2RefreshTokenEntity> getRefreshTokensForClient(ClientDetailsEntity client) {
 		TypedQuery<OAuth2RefreshTokenEntity> queryR = manager.createNamedQuery(OAuth2RefreshTokenEntity.QUERY_BY_CLIENT, OAuth2RefreshTokenEntity.class);
@@ -186,26 +184,49 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		List<OAuth2RefreshTokenEntity> refreshTokens = queryR.getResultList();
 		return refreshTokens;
 	}
+	
+	@Override
+	public Set<OAuth2AccessTokenEntity> getAccessTokensByUserName(String name) {
+		TypedQuery<OAuth2AccessTokenEntity> query = manager.createNamedQuery(OAuth2AccessTokenEntity.QUERY_BY_NAME, OAuth2AccessTokenEntity.class);
+	    query.setParameter(OAuth2AccessTokenEntity.PARAM_NAME, name);
+	    List<OAuth2AccessTokenEntity> results = query.getResultList();
+	    return results != null ? new HashSet<>(results) : new HashSet<>();
+	}
+	
+	@Override
+	public Set<OAuth2RefreshTokenEntity> getRefreshTokensByUserName(String name) {
+		TypedQuery<OAuth2RefreshTokenEntity> query = manager.createNamedQuery(OAuth2RefreshTokenEntity.QUERY_BY_NAME, OAuth2RefreshTokenEntity.class);
+	    query.setParameter(OAuth2RefreshTokenEntity.PARAM_NAME, name);
+	    List<OAuth2RefreshTokenEntity> results = query.getResultList();
+	    return results != null ? new HashSet<>(results) : new HashSet<>();
+	}
 
 	@Override
 	public Set<OAuth2AccessTokenEntity> getAllExpiredAccessTokens() {
+		DefaultPageCriteria pageCriteria = new DefaultPageCriteria(0, MAXEXPIREDRESULTS);
+		return getAllExpiredAccessTokens(pageCriteria);
+	}
+
+	@Override
+	public Set<OAuth2AccessTokenEntity> getAllExpiredAccessTokens(PageCriteria pageCriteria) {
 		TypedQuery<OAuth2AccessTokenEntity> query = manager.createNamedQuery(OAuth2AccessTokenEntity.QUERY_EXPIRED_BY_DATE, OAuth2AccessTokenEntity.class);
 		query.setParameter(OAuth2AccessTokenEntity.PARAM_DATE, new Date());
-		query.setMaxResults(MAXEXPIREDRESULTS);
-		return new LinkedHashSet<>(query.getResultList());
+		return new LinkedHashSet<>(JpaUtil.getResultPage(query, pageCriteria));
 	}
 
 	@Override
 	public Set<OAuth2RefreshTokenEntity> getAllExpiredRefreshTokens() {
-		TypedQuery<OAuth2RefreshTokenEntity> query = manager.createNamedQuery(OAuth2RefreshTokenEntity.QUERY_EXPIRED_BY_DATE, OAuth2RefreshTokenEntity.class);
-		query.setParameter(OAuth2RefreshTokenEntity.PARAM_DATE, new Date());
-		query.setMaxResults(MAXEXPIREDRESULTS);
-		return new LinkedHashSet<>(query.getResultList());
+		DefaultPageCriteria pageCriteria = new DefaultPageCriteria(0, MAXEXPIREDRESULTS);
+		return getAllExpiredRefreshTokens(pageCriteria);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.mitre.oauth2.repository.OAuth2TokenRepository#getAccessTokensForResourceSet(org.mitre.uma.model.ResourceSet)
-	 */
+	@Override
+	public Set<OAuth2RefreshTokenEntity> getAllExpiredRefreshTokens(PageCriteria pageCriteria) {
+		TypedQuery<OAuth2RefreshTokenEntity> query = manager.createNamedQuery(OAuth2RefreshTokenEntity.QUERY_EXPIRED_BY_DATE, OAuth2RefreshTokenEntity.class);
+		query.setParameter(OAuth2AccessTokenEntity.PARAM_DATE, new Date());
+		return new LinkedHashSet<>(JpaUtil.getResultPage(query,pageCriteria));
+	}
+
 	@Override
 	public Set<OAuth2AccessTokenEntity> getAccessTokensForResourceSet(ResourceSet rs) {
 		TypedQuery<OAuth2AccessTokenEntity> query = manager.createNamedQuery(OAuth2AccessTokenEntity.QUERY_BY_RESOURCE_SET, OAuth2AccessTokenEntity.class);
@@ -213,13 +234,9 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		return new LinkedHashSet<>(query.getResultList());
 	}
 
-	/* (non-Javadoc)
-	 * @see org.mitre.oauth2.repository.OAuth2TokenRepository#clearDuplicateAccessTokens()
-	 */
 	@Override
 	@Transactional(value="defaultTransactionManager")
 	public void clearDuplicateAccessTokens() {
-
 		Query query = manager.createQuery("select a.jwt, count(1) as c from OAuth2AccessTokenEntity a GROUP BY a.jwt HAVING count(1) > 1");
 		@SuppressWarnings("unchecked")
 		List<Object[]> resultList = query.getResultList();
@@ -238,9 +255,6 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see org.mitre.oauth2.repository.OAuth2TokenRepository#clearDuplicateRefreshTokens()
-	 */
 	@Override
 	@Transactional(value="defaultTransactionManager")
 	public void clearDuplicateRefreshTokens() {
@@ -262,7 +276,7 @@ public class JpaOAuth2TokenRepository implements OAuth2TokenRepository {
 		}
 
 	}
-	
+
 	@Override
 	public List<OAuth2AccessTokenEntity> getAccessTokensForApprovedSite(ApprovedSite approvedSite) {
 		TypedQuery<OAuth2AccessTokenEntity> queryA = manager.createNamedQuery(OAuth2AccessTokenEntity.QUERY_BY_APPROVED_SITE, OAuth2AccessTokenEntity.class);

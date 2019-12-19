@@ -1,6 +1,7 @@
 /*******************************************************************************
- * Copyright 2016 The MITRE Corporation
- *   and the MIT Internet Trust Consortium
+ * Copyright 2018 The MIT Internet Trust Consortium
+ *
+ * Portions copyright 2011-2013 The MITRE Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +16,11 @@
  * limitations under the License.
  *******************************************************************************/
 package org.mitre.openid.connect.service.impl;
+
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.isA;
+import static org.mockito.Matchers.isNull;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -71,11 +77,6 @@ import com.nimbusds.jwt.JWTParser;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
-
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.isNull;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -782,8 +783,6 @@ public class TestMITREidDataService_1_1 {
 		scope3.setRestricted(false);
 		scope3.setDefaultScope(true);
 		scope3.setIcon("road");
-		scope3.setStructured(true);
-		scope3.setStructuredParamDescription("Structured Parameter");
 
 		String configJson = "{" +
 				"\"" + MITREidDataService.CLIENTS + "\": [], " +
@@ -797,7 +796,7 @@ public class TestMITREidDataService_1_1 {
 
 				"{\"id\":1,\"description\":\"Scope 1\",\"icon\":\"glass\",\"value\":\"scope1\",\"allowDynReg\":false,\"defaultScope\":false}," +
 				"{\"id\":2,\"description\":\"Scope 2\",\"icon\":\"ball\",\"value\":\"scope2\",\"allowDynReg\":true,\"defaultScope\":false}," +
-				"{\"id\":3,\"description\":\"Scope 3\",\"icon\":\"road\",\"value\":\"scope3\",\"allowDynReg\":true,\"defaultScope\":true,\"structured\":true,\"structuredParameter\":\"Structured Parameter\"}" +
+				"{\"id\":3,\"description\":\"Scope 3\",\"icon\":\"road\",\"value\":\"scope3\",\"allowDynReg\":true,\"defaultScope\":true}" +
 
 				"  ]" +
 				"}";
@@ -817,24 +816,18 @@ public class TestMITREidDataService_1_1 {
 		assertThat(savedScopes.get(0).getIcon(), equalTo(scope1.getIcon()));
 		assertThat(savedScopes.get(0).isDefaultScope(), equalTo(scope1.isDefaultScope()));
 		assertThat(savedScopes.get(0).isRestricted(), equalTo(scope1.isRestricted()));
-		assertThat(savedScopes.get(0).isStructured(), equalTo(scope1.isStructured()));
-		assertThat(savedScopes.get(0).getStructuredParamDescription(), equalTo(scope1.getStructuredParamDescription()));
 
 		assertThat(savedScopes.get(1).getValue(), equalTo(scope2.getValue()));
 		assertThat(savedScopes.get(1).getDescription(), equalTo(scope2.getDescription()));
 		assertThat(savedScopes.get(1).getIcon(), equalTo(scope2.getIcon()));
 		assertThat(savedScopes.get(1).isDefaultScope(), equalTo(scope2.isDefaultScope()));
 		assertThat(savedScopes.get(1).isRestricted(), equalTo(scope2.isRestricted()));
-		assertThat(savedScopes.get(1).isStructured(), equalTo(scope2.isStructured()));
-		assertThat(savedScopes.get(1).getStructuredParamDescription(), equalTo(scope2.getStructuredParamDescription()));
 
 		assertThat(savedScopes.get(2).getValue(), equalTo(scope3.getValue()));
 		assertThat(savedScopes.get(2).getDescription(), equalTo(scope3.getDescription()));
 		assertThat(savedScopes.get(2).getIcon(), equalTo(scope3.getIcon()));
 		assertThat(savedScopes.get(2).isDefaultScope(), equalTo(scope3.isDefaultScope()));
 		assertThat(savedScopes.get(2).isRestricted(), equalTo(scope3.isRestricted()));
-		assertThat(savedScopes.get(2).isStructured(), equalTo(scope3.isStructured()));
-		assertThat(savedScopes.get(2).getStructuredParamDescription(), equalTo(scope3.getStructuredParamDescription()));
 
 	}
 

@@ -1,6 +1,7 @@
 /*******************************************************************************
- * Copyright 2016 The MITRE Corporation
- *   and the MIT Internet Trust Consortium
+ * Copyright 2018 The MIT Internet Trust Consortium
+ *
+ * Portions copyright 2011-2013 The MITRE Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +16,7 @@
  * limitations under the License.
  *******************************************************************************/
 /**
- * 
+ *
  */
 package org.mitre.oauth2.service;
 
@@ -37,12 +38,12 @@ public interface SystemScopeService {
 	public static final String RESOURCE_TOKEN_SCOPE = "resource-token"; // this scope manages client-style protected resources
 	public static final String UMA_PROTECTION_SCOPE = "uma_protection";
 	public static final String UMA_AUTHORIZATION_SCOPE = "uma_authorization";
-	
-	public static final Set<SystemScope> reservedScopes = 
-		Sets.newHashSet(
-			new SystemScope(REGISTRATION_TOKEN_SCOPE),
-			new SystemScope(RESOURCE_TOKEN_SCOPE)
-		);
+
+	public static final Set<SystemScope> reservedScopes =
+			Sets.newHashSet(
+					new SystemScope(REGISTRATION_TOKEN_SCOPE),
+					new SystemScope(RESOURCE_TOKEN_SCOPE)
+					);
 
 	public Set<SystemScope> getAll();
 
@@ -56,7 +57,7 @@ public interface SystemScopeService {
 	 * Get all the reserved system scopes. These can't be used
 	 * by clients directly, but are instead tied to special system
 	 * tokens like id tokens and registration access tokens.
-	 * 
+	 *
 	 * @return
 	 */
 	public Set<SystemScope> getReserved();
@@ -96,12 +97,7 @@ public interface SystemScopeService {
 	public Set<String> toStrings(Set<SystemScope> scope);
 
 	/**
-	 * Test whether the scopes in both sets are compatible, with special
-	 * processing for structured scopes. All scopes in "actual" must exist in
-	 * "expected". If a scope in "expected" is structured and has a value, it
-	 * must be matched exactly by its corresponding scope in "actual". If a
-	 * scope in "expected" is structured but has no value, it may be matched by
-	 * a scope with or without a value in "actual".
+	 * Test whether the scopes in both sets are compatible. All scopes in "actual" must exist in "expected".
 	 */
 	public boolean scopesMatch(Set<String> expected, Set<String> actual);
 
